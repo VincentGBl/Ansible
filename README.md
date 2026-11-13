@@ -2,7 +2,7 @@
 
 Este repositório documenta o processo que segui para automatizar a configuração das máquinas com Ansible, em dez etapas: do levantamento das necessidades até a implantação gradual em ambiente corporativo.
 
-Há também uma versão interativa deste mapa em [`mapa-ansible.html`](mapa-ansible.html). Com o GitHub Pages ativado, ela fica disponível em `https://SEU-USUARIO.github.io/SEU-REPOSITORIO/mapa-ansible.html`.
+Há também uma versão interativa deste mapa neste repositório através do arquivo "mapa-ansible.html".
 
 ## Visão geral do processo
 
