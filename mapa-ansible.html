@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Ansible: do levantamento à implantação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #EEF2F6;
+  --surface: #FFFFFF;
+  --ink: #13233A;
+  --ink-soft: #4A5C74;
+  --line: #C3CEDB;
+  --dot: rgba(19, 35, 58, .13);
+  --step-bg: #13233A;
+  --step-fg: #F3F6FA;
+  --step-num: #8FB2FF;
+  --note-bg: #DCE8FB;
+  --note-border: #5B8DEF;
+  --note-fg: #13233A;
+  --good-bg: #D2EFDC;
+  --good-border: #1E7B4A;
+  --loop: #B77400;
+  --select: #2B5FE3;
+  --font: "Archivo", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #0E1726;
+    --surface: #152136;
+    --ink: #E3EAF4;
+    --ink-soft: #9DADC4;
+    --line: #2C3D57;
+    --dot: rgba(227, 234, 244, .12);
+    --step-bg: #E3EAF4;
+    --step-fg: #0E1726;
+    --step-num: #2B5FE3;
+    --note-bg: #17294A;
+    --note-border: #5B8DEF;
+    --note-fg: #E3EAF4;
+    --good-bg: #123524;
+    --good-border: #4CC38A;
+    --loop: #F0B13C;
+    --select: #8FB2FF;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+}
+button { font: inherit; color: inherit; }
+
+.page { max-width: 1440px; margin: 0 auto; padding: 28px 24px 40px; }
+
+.intro { max-width: 62ch; margin-bottom: 20px; }
+.intro h1 {
+  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+  line-height: 1.08;
+  font-weight: 700;
+  font-stretch: 112%;
+  letter-spacing: -0.015em;
+  margin: 0 0 10px;
+}
+.intro p { margin: 0; color: var(--ink-soft); }
+
+.layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
+}
+
+/* ---------- barra de controles ---------- */
+.bar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-bottom: 10px;
+}
+.bar .group { display: flex; gap: 6px; align-items: center; }
+.bar .spacer { flex: 1 1 auto; }
+.btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: .9rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--ink-soft); }
+.btn.icon { width: 36px; padding: 7px 0; text-align: center; }
+.btn.primary { background: var(--step-bg); color: var(--step-fg); border-color: var(--step-bg); }
+.btn:disabled { opacity: .45; cursor: default; }
+.counter { font-size: .9rem; color: var(--ink-soft); min-width: 7.5em; text-align: center; font-variant-numeric: tabular-nums; }
+
+:focus-visible { outline: 2px dashed var(--select); outline-offset: 3px; }
+
+/* ---------- mapa ---------- */
+.viewport {
+  position: relative;
+  height: clamp(420px, 72vh, 780px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background-color: var(--surface);
+  background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.viewport.dragging { cursor: grabbing; }
+.stage {
+  position: absolute; left: 0; top: 0;
+  width: 1260px; height: 1030px;
+  transform-origin: 0 0;
+}
+.stage.glide { transition: transform .45s cubic-bezier(.2, .7, .2, 1); }
+@media (prefers-reduced-motion: reduce) { .stage.glide { transition: none; } }
+.stage svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+
+.e-main { stroke: var(--ink); stroke-width: 2; fill: none; }
+.e-note { stroke: var(--ink-soft); stroke-width: 1.5; stroke-dasharray: 2 5; stroke-linecap: round; fill: none; }
+.e-loop { stroke: var(--loop); stroke-width: 2; fill: none; }
+.e-loop.dash { stroke-dasharray: 7 6; }
+.m-ink { fill: var(--ink); }
+.m-loop { fill: var(--loop); }
+.e-label { font-family: var(--font); font-size: 13px; font-weight: 600; text-anchor: middle; fill: var(--ink-soft); }
+.e-label.loop { fill: var(--loop); }
+
+.node {
+  position: absolute;
+  width: 200px;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.node.step {
+  height: 80px;
+  background: var(--step-bg);
+  color: var(--step-fg);
+  border: 0;
+  padding: 0 14px 0 12px;
+  display: flex; align-items: center; gap: 11px;
+  font-size: 16px; font-weight: 620;
+}
+.node.step .num {
+  flex: 0 0 auto;
+  min-width: 24px;
+  font-size: 26px; font-weight: 750; font-stretch: 120%;
+  color: var(--step-num);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.node.note {
+  height: 60px;
+  background: var(--note-bg);
+  color: var(--note-fg);
+  border: 1.5px solid var(--note-border);
+  padding: 0 12px;
+  font-size: 14px; font-weight: 520;
+  display: flex; align-items: center;
+}
+.node.note.good { background: var(--good-bg); border-color: var(--good-border); }
+.node.selected { outline: 3px solid var(--select); outline-offset: 4px; }
+.node.related { outline: 2px solid var(--select); outline-offset: 2px; }
+.hide-notes .node.note, .hide-notes .e-note { display: none; }
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  margin: 10px 2px 0; padding: 0; list-style: none;
+  font-size: .85rem; color: var(--ink-soft);
+}
+.legend li { display: flex; align-items: center; gap: 7px; }
+.sw { width: 16px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.step { background: var(--step-bg); }
+.sw.note { background: var(--note-bg); border: 1.5px solid var(--note-border); }
+.sw.good { background: var(--good-bg); border: 1.5px solid var(--good-border); }
+.sw.loop { height: 0; border-top: 2px dashed var(--loop); border-radius: 0; }
+.hint { font-size: .85rem; color: var(--ink-soft); margin: 8px 2px 0; }
+
+/* ---------- painel ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 22px 22px 24px;
+}
+@media (min-width: 960px) {
+  .panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; margin-top: 46px; }
+}
+.panel .where { margin: 0 0 6px; font-size: .9rem; color: var(--ink-soft); font-weight: 550; }
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 1.45rem; line-height: 1.15; font-weight: 700; font-stretch: 108%;
+  letter-spacing: -0.01em;
+}
+.panel h3 { margin: 20px 0 4px; font-size: 1rem; font-weight: 680; }
+.panel p { margin: 0 0 10px; }
+.panel .detail {
+  border-left: 3px solid var(--note-border);
+  padding: 2px 0 2px 14px;
+  margin-top: 18px;
+}
+.panel .detail.good { border-left-color: var(--good-border); }
+.panel .detail h3 { margin-top: 0; }
+.panel .detail p:last-child { margin-bottom: 0; }
+.panel .concept {
+  margin-top: 20px; padding: 14px 16px;
+  background: var(--paper);
+  border-radius: 8px;
+}
+.panel .concept h3 { margin-top: 0; }
+.panel .concept p { margin: 0; color: var(--ink-soft); }
+.panel .linkbtn {
+  background: none; border: 0; padding: 0;
+  color: var(--select); font-weight: 600; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="intro">
+    <h1>Projeto Ansible: do levantamento à implantação</h1>
+    <p>O caminho que segui para automatizar a configuração das máquinas, em dez etapas. Selecione uma etapa no mapa para ver o que foi feito nela.</p>
+  </header>
+
+  <div class="layout">
+    <section aria-label="Mapa do processo">
+      <div class="bar">
+        <div class="group">
+          <button class="btn" id="prev" type="button">Etapa anterior</button>
+          <span class="counter" id="counter" aria-live="polite"></span>
+          <button class="btn primary" id="next" type="button">Próxima etapa</button>
+        </div>
+        <span class="spacer"></span>
+        <div class="group">
+          <button class="btn" id="toggleNotes" type="button" aria-pressed="false">Ocultar detalhes</button>
+          <button class="btn icon" id="zoomOut" type="button" aria-label="Afastar">−</button>
+          <button class="btn icon" id="zoomIn" type="button" aria-label="Aproximar">+</button>
+          <button class="btn" id="fit" type="button">Ver tudo</button>
+        </div>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <div class="stage" id="stage">
+          <svg id="edges" width="1260" height="1030" viewBox="0 0 1260 1030" aria-hidden="true">
+            <defs>
+              <marker id="ah-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path class="m-ink" d="M0 0 L10 5 L0 10 z"/>
+              </marker>
+              <marker id="ah-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path class="m-loop" d="M0 0 L10 5 L0 10 z"/>
+              </marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+
+      <ul class="legend">
+        <li><span class="sw step"></span>Etapa do processo</li>
+        <li><span class="sw note"></span>Detalhe da etapa</li>
+        <li><span class="sw good"></span>Boa prática</li>
+        <li><span class="sw loop"></span>Ciclo de testes e ajustes</li>
+      </ul>
+      <p class="hint">Arraste para mover o mapa. Para aproximar, use os botões, o gesto de pinça ou Ctrl + rolagem. As setas do teclado avançam e voltam entre as etapas.</p>
+    </section>
+
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 1260, H = 1030;
+
+  /* ---------- conteúdo ---------- */
+  var steps = [
+    { id: "s1", n: 1, x: 60, y: 250,
+      title: "Levantamento de programas e configurações",
+      body: "Antes de escrever qualquer playbook, é preciso saber o que cada espaço realmente precisa: quais programas instalar e quais configurações aplicar. Esse levantamento parte de quem usa as máquinas no dia a dia.",
+      notes: ["n1a", "n1b"] },
+    { id: "s2", n: 2, x: 360, y: 250,
+      title: "Quantas máquinas serão configuradas",
+      body: "Com as necessidades em mãos, o passo seguinte é saber onde elas serão aplicadas: quantas máquinas existem e como se organizam.",
+      notes: ["n2"],
+      concept: { title: "Conceito: inventário",
+        text: "No Ansible, essa lista de máquinas e grupos vira o inventário, o arquivo que diz ao servidor quais hosts existem e a que grupo cada um pertence." } },
+    { id: "s3", n: 3, x: 660, y: 250,
+      title: "Esquema de configuração dos playbooks",
+      body: "Aqui se define a arquitetura da solução: de onde os playbooks partem e como chegam às máquinas.",
+      notes: ["n3"],
+      concept: { title: "Conceito: sem agente",
+        text: "O Ansible não exige nenhum programa instalado nas máquinas-alvo. O servidor se conecta a elas por SSH e executa as tarefas remotamente, por isso a chave SSH é peça central do esquema." } },
+    { id: "s4", n: 4, x: 960, y: 250,
+      title: "Criação dos micro-playbooks",
+      body: "Os micro-playbooks são as peças pequenas do projeto. Cada um cuida de um conjunto de tarefas, e depois eles são combinados conforme a necessidade de cada grupo.",
+      notes: ["n4a", "n4b"],
+      concept: { title: "Conceito: idempotência",
+        text: "Um playbook idempotente pode ser executado várias vezes e sempre leva a máquina ao mesmo estado final, sem repetir alterações que já foram feitas." } },
+    { id: "s5", n: 5, x: 960, y: 530,
+      title: "Testes em ambiente controlado",
+      body: "Primeira rodada de testes: os micro-playbooks são executados em um ambiente isolado antes de chegarem perto das máquinas reais.",
+      notes: ["n5"] },
+    { id: "s6", n: 6, x: 660, y: 530,
+      title: "Criação dos macro-playbooks",
+      body: "Com os micro-playbooks validados, eles são reunidos em macro-playbooks: um conjunto para cada grupo de máquinas levantado na etapa 2.",
+      notes: ["n6"] },
+    { id: "s7", n: 7, x: 360, y: 530,
+      title: "Configurar o servidor central Ansible",
+      body: "O servidor que vai orquestrar tudo é montado e recebe os arquivos produzidos nas etapas anteriores.",
+      notes: ["n7"] },
+    { id: "s8", n: 8, x: 360, y: 730,
+      title: "Testes em ambiente controlado",
+      body: "Segunda rodada de testes, agora com o servidor central já configurado. Se algo falhar, o processo vai para os ajustes e volta a esta etapa. Se a rodada for aprovada, segue para a implementação.",
+      notes: ["n8"] },
+    { id: "s9", n: 9, x: 60, y: 730,
+      title: "Ajustes, se necessário",
+      body: "Corrigir o que os testes ou a implantação revelarem e testar de novo. O ciclo se repete até a rodada passar sem problemas.",
+      notes: [] },
+    { id: "s10", n: 10, x: 660, y: 730,
+      title: "Implementação em ambiente corporativo",
+      body: "A ferramenta entra em uso nas máquinas reais. O que aparecer durante a implantação volta para a etapa de ajustes.",
+      notes: ["n10"] }
+  ];
+
+  var notes = {
+    n1a: { x: 60, y: 140, parent: "s1", label: "Entrevistar docentes e discentes",
+      text: "Entrevistar docentes e discentes sobre possíveis novos softwares e necessidades, assim como inconvenientes e dificuldades com ferramentas e softwares já instalados." },
+    n1b: { x: 60, y: 30, parent: "s1", label: "Arquivo de requisições",
+      text: "Criar um arquivo com todas as requisições e instalações pertinentes e as configurações possíveis para os espaços destinados. Registrar e seguir o processo." },
+    n2: { x: 360, y: 140, parent: "s2", label: "Grupos e zonas de IP",
+      text: "Levantar as máquinas a serem configuradas, separar em grupos e registrar os IPs por “zonas” associadas aos grupos, que serão utilizadas pelos macro-playbooks. Registrar e seguir o processo." },
+    n3: { x: 660, y: 140, parent: "s3", label: "Servidor central orquestrador",
+      text: "Um servidor central serve de orquestrador e dispara os playbooks para os grupos de IP designados. Ele guarda todos os arquivos de configuração, os playbooks e a chave SSH única de acesso aos computadores-alvo." },
+    n4a: { x: 960, y: 140, parent: "s4", label: "Tasks de instalação e configuração",
+      text: "Criar as tasks para instalação dos softwares e das configurações necessárias: pacotes de base, snaps, sistema de avisos, scripts de manutenção, configuração do ambiente de programação, instalação de softwares e drivers diversos." },
+    n4b: { x: 960, y: 30, parent: "s4", good: true, label: "Boas práticas: idempotência e YAML limpo",
+      text: "Preservar boas práticas nos playbooks: idempotência e YAML limpo." },
+    n5: { x: 960, y: 420, parent: "s5", label: "VM com a mesma ISO dos hosts",
+      text: "Criar uma máquina virtual no VMware com a mesma ISO que será usada nos hosts finais e rodar os playbooks nela para fins de teste." },
+    n6: { x: 660, y: 420, parent: "s6", label: "Playbooks por grupo e zonas de IP",
+      text: "Criar os macro-playbooks conforme as necessidades dos grupos, assim como as zonas de IP de cada grupo." },
+    n7: { x: 360, y: 420, parent: "s7", label: "Instalar o Ansible e migrar os arquivos",
+      text: "Instalar o servidor e o Ansible e migrar os arquivos de configuração: inventário de IPs, instalação da chave SSH nos hosts finais, micro e macro-playbooks, arquivo para armazenamento de logs e ansible.cfg." },
+    n8: { x: 360, y: 864, parent: "s8", label: "VM com a mesma ISO dos hosts",
+      text: "Criar uma máquina virtual no VMware com a mesma ISO que será usada nos hosts finais e rodar os playbooks nela para fins de teste." },
+    n10: { x: 960, y: 740, parent: "s10", label: "Implantação gradual com análise",
+      text: "Implementar gradualmente, com um período de análise de resultados." }
+  };
+
+  /* ---------- ligações ---------- */
+  var edges = [
+    // fluxo principal
+    { c: "e-main", d: "M260 290 H356", m: "ink" },
+    { c: "e-main", d: "M560 290 H656", m: "ink" },
+    { c: "e-main", d: "M860 290 H956", m: "ink" },
+    { c: "e-main", d: "M1160 290 C1250 290 1250 570 1165 570", m: "ink" },
+    { c: "e-main", d: "M960 570 H864", m: "ink" },
+    { c: "e-main", d: "M660 570 H564", m: "ink" },
+    { c: "e-main", d: "M460 610 V726", m: "ink" },
+    { c: "e-main", d: "M560 770 H656", m: "ink" },
+    // ciclo de testes e ajustes
+    { c: "e-loop", d: "M360 755 H264", m: "loop" },
+    { c: "e-loop", d: "M260 787 H356", m: "loop" },
+    { c: "e-loop dash", d: "M1060 800 C1060 1040 160 1040 160 815", m: "loop" },
+    // detalhes
+    { c: "e-note", d: "M160 250 V200" },
+    { c: "e-note", d: "M160 140 V90" },
+    { c: "e-note", d: "M460 250 V200" },
+    { c: "e-note", d: "M760 250 V200" },
+    { c: "e-note", d: "M1060 250 V200" },
+    { c: "e-note", d: "M1060 140 V90" },
+    { c: "e-note", d: "M1060 530 V480" },
+    { c: "e-note", d: "M760 530 V480" },
+    { c: "e-note", d: "M460 530 V480" },
+    { c: "e-note", d: "M460 810 V864" },
+    { c: "e-note", d: "M860 770 H960" }
+  ];
+  var labels = [
+    { x: 610, y: 761, t: "aprovado" },
+    { x: 310, y: 746, t: "falhou", loop: true },
+    { x: 310, y: 806, t: "novo teste", loop: true },
+    { x: 760, y: 1006, t: "resultados pedem ajuste", loop: true }
+  ];
+
+  /* ---------- montagem ---------- */
+  var viewport = document.getElementById("viewport");
+  var stage = document.getElementById("stage");
+  var svg = document.getElementById("edges");
+  var panel = document.getElementById("panel");
+  var counter = document.getElementById("counter");
+  var NS = "http://www.w3.org/2000/svg";
+  var els = {};
+  var stepById = {};
+
+  edges.forEach(function (e) {
+    var p = document.createElementNS(NS, "path");
+    p.setAttribute("class", e.c);
+    p.setAttribute("d", e.d);
+    if (e.m) p.setAttribute("marker-end", "url(#ah-" + e.m + ")");
+    svg.appendChild(p);
+  });
+  labels.forEach(function (l) {
+    var t = document.createElementNS(NS, "text");
+    t.setAttribute("class", "e-label" + (l.loop ? " loop" : ""));
+    t.setAttribute("x", l.x); t.setAttribute("y", l.y);
+    t.textContent = l.t;
+    svg.appendChild(t);
+  });
+
+  function makeNode(id, cls, x, y, html, aria) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "node " + cls;
+    b.style.left = x + "px";
+    b.style.top = y + "px";
+    b.innerHTML = html;
+    b.setAttribute("aria-label", aria);
+    b.addEventListener("click", function () { select(id, false); });
+    stage.appendChild(b);
+    els[id] = b;
+  }
+
+  steps.forEach(function (s) {
+    stepById[s.id] = s;
+    makeNode(s.id, "step", s.x, s.y,
+      '<span class="num">' + s.n + "</span><span>" + s.title + "</span>",
+      "Etapa " + s.n + ": " + s.title);
+    s.notes.forEach(function (nid) {
+      var n = notes[nid];
+      makeNode(nid, "note" + (n.good ? " good" : ""), n.x, n.y, "<span>" + n.label + "</span>",
+        "Detalhe da etapa " + s.n + ": " + n.label);
+    });
+  });
+
+  /* ---------- seleção e painel ---------- */
+  var current = "s1";
+
+  function currentStep() {
+    return stepById[current] || stepById[notes[current].parent];
+  }
+
+  function renderPanel() {
+    var html = "";
+    if (stepById[current]) {
+      var s = stepById[current];
+      html += '<p class="where">Etapa ' + s.n + " de " + steps.length + "</p>";
+      html += "<h2>" + s.title + "</h2>";
+      html += "<p>" + s.body + "</p>";
+      s.notes.forEach(function (nid) {
+        var n = notes[nid];
+        html += '<div class="detail' + (n.good ? " good" : "") + '"><h3>' + n.label + "</h3><p>" + n.text + "</p></div>";
+      });
+      if (s.concept) {
+        html += '<div class="concept"><h3>' + s.concept.title + "</h3><p>" + s.concept.text + "</p></div>";
+      }
+    } else {
+      var note = notes[current];
+      var parent = stepById[note.parent];
+      html += '<p class="where">Detalhe da etapa ' + parent.n + "</p>";
+      html += "<h2>" + note.label + "</h2>";
+      html += "<p>" + note.text + "</p>";
+      html += '<p><button class="linkbtn" type="button" id="toParent">Ver a etapa ' + parent.n + " completa</button></p>";
+    }
+    panel.innerHTML = html;
+    var tp = document.getElementById("toParent");
+    if (tp) tp.addEventListener("click", function () { select(notes[current].parent, false); });
+  }
+
+  function select(id, glide) {
+    current = id;
+    Object.keys(els).forEach(function (k) { els[k].classList.remove("selected", "related"); });
+    els[id].classList.add("selected");
+    if (stepById[id]) {
+      stepById[id].notes.forEach(function (nid) { els[nid].classList.add("related"); });
+    }
+    var s = currentStep();
+    counter.textContent = "Etapa " + s.n + " de " + steps.length;
+    document.getElementById("prev").disabled = s.n === 1;
+    document.getElementById("next").disabled = s.n === steps.length;
+    renderPanel();
+    if (glide) focusStep(s);
+  }
+
+  function move(delta) {
+    var s = currentStep();
+    var i = s.n - 1 + delta;
+    // vindo de um detalhe, "anterior" volta para a própria etapa
+    if (!stepById[current] && delta < 0) i = s.n - 1;
+    if (i < 0 || i >= steps.length) return;
+    select(steps[i].id, true);
+  }
+
+  /* ---------- mover e aproximar ---------- */
+  var k = 1, tx = 0, ty = 0, touched = false;
+
+  function apply(glide) {
+    stage.classList.toggle("glide", !!glide);
+    stage.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + k + ")";
+  }
+  function clampK(v) { return Math.min(2.2, Math.max(0.3, v)); }
+
+  function centerOn(cx, cy, glide) {
+    var r = viewport.getBoundingClientRect();
+    tx = r.width / 2 - cx * k;
+    ty = r.height / 2 - cy * k;
+    apply(glide);
+  }
+
+  // centro do conjunto etapa + detalhes
+  function clusterCenter(s) {
+    var x0 = s.x, x1 = s.x + 200, y0 = s.y, y1 = s.y + 80;
+    s.notes.forEach(function (nid) {
+      var n = notes[nid];
+      x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x + 200);
+      y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y + 60);
+    });
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+  }
+
+  function focusStep(s) {
+    if (k < 0.9) k = 0.9;
+    var c = clusterCenter(s);
+    centerOn(c.x, c.y, true);
+  }
+
+  function fitAll(glide) {
+    var r = viewport.getBoundingClientRect();
+    var fk = Math.min(r.width / W, r.height / H);
+    if (fk >= 0.5) {
+      k = fk;
+      tx = (r.width - W * k) / 2;
+      ty = (r.height - H * k) / 2;
+      apply(glide);
+    } else {
+      // tela estreita: o mapa inteiro ficaria ilegível, então começa na etapa atual
+      k = 0.8;
+      var c = clusterCenter(currentStep());
+      centerOn(c.x, c.y, glide);
+    }
+  }
+  function showAll(glide) {
+    var r = viewport.getBoundingClientRect();
+    k = clampK(Math.min(r.width / W, r.height / H));
+    tx = (r.width - W * k) / 2;
+    ty = (r.height - H * k) / 2;
+    apply(glide);
+  }
+
+  function zoomAt(factor, px, py, glide) {
+    var nk = clampK(k * factor);
+    tx = px - (px - tx) * (nk / k);
+    ty = py - (py - ty) * (nk / k);
+    k = nk;
+    apply(glide);
+  }
+  function zoomCenter(factor) {
+    var r = viewport.getBoundingClientRect();
+    touched = true;
+    zoomAt(factor, r.width / 2, r.height / 2, true);
+  }
+
+  var pointers = new Map();
+  var drag = null, pinch = null, moved = false;
+
+  viewport.addEventListener("pointerdown", function (e) {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      drag = { x: e.clientX, y: e.clientY, tx: tx, ty: ty };
+      moved = false;
+    } else if (pointers.size === 2) {
+      var pts = Array.from(pointers.values());
+      pinch = { d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) };
+      drag = null;
+      moved = true;
+    }
+  });
+  viewport.addEventListener("pointermove", function (e) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pointers.size === 2) {
+      var pts = Array.from(pointers.values());
+      var d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      var r = viewport.getBoundingClientRect();
+      var mx = (pts[0].x + pts[1].x) / 2 - r.left;
+      var my = (pts[0].y + pts[1].y) / 2 - r.top;
+      if (pinch.d > 0) zoomAt(d / pinch.d, mx, my, false);
+      pinch.d = d;
+      touched = true;
+      return;
+    }
+    if (!drag) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!moved && Math.hypot(dx, dy) < 5) return;
+    if (!moved) {
+      moved = true;
+      touched = true;
+      viewport.classList.add("dragging");
+      try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    tx = drag.tx + dx;
+    ty = drag.ty + dy;
+    apply(false);
+  });
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size === 0) {
+      drag = null;
+      viewport.classList.remove("dragging");
+    }
+  }
+  viewport.addEventListener("pointerup", endPointer);
+  viewport.addEventListener("pointercancel", endPointer);
+  // um arraste não deve contar como clique em um nó
+  viewport.addEventListener("click", function (e) {
+    if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; }
+  }, true);
+
+  viewport.addEventListener("wheel", function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    var r = viewport.getBoundingClientRect();
+    touched = true;
+    zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top, false);
+  }, { passive: false });
+
+  /* ---------- controles ---------- */
+  document.getElementById("prev").addEventListener("click", function () { move(-1); });
+  document.getElementById("next").addEventListener("click", function () { move(1); });
+  document.getElementById("zoomIn").addEventListener("click", function () { zoomCenter(1.25); });
+  document.getElementById("zoomOut").addEventListener("click", function () { zoomCenter(0.8); });
+  document.getElementById("fit").addEventListener("click", function () { touched = true; showAll(true); });
+
+  var toggle = document.getElementById("toggleNotes");
+  toggle.addEventListener("click", function () {
+    var hidden = stage.classList.toggle("hide-notes");
+    toggle.textContent = hidden ? "Mostrar detalhes" : "Ocultar detalhes";
+    toggle.setAttribute("aria-pressed", hidden ? "true" : "false");
+    if (hidden && !stepById[current]) select(notes[current].parent, false);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === "ArrowRight") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); move(-1); }
+  });
+
+  window.addEventListener("resize", function () { if (!touched) fitAll(false); });
+
+  select("s1", false);
+  fitAll(false);
+})();
+</script>
+</body>
+</html>
