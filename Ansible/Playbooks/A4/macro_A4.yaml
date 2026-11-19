@@ -1,0 +1,77 @@
+---
+- name: Orquestrador do Laboratório A4
+  hosts: localhost
+  gather_facts: false
+
+- name: Executar Customização de papel de parede
+  ansible.builtin.import_playbook: ../Micro_playbooks/Customizacao.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Executar Instalação do conda
+  ansible.builtin.import_playbook: ../Micro_playbooks/conda_bashrc.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Instalar aplicativos APT e Snap
+  ansible.builtin.import_playbook: ../Micro_playbooks/softwares_impatech.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Configurar e instalar Lean4
+  ansible.builtin.import_playbook: ../Micro_playbooks/lean4.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Configurar e Instalar Ollama
+  ansible.builtin.import_playbook: ../Micro_playbooks/ollama.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Configurar Google Workspace (LDAP)
+  ansible.builtin.import_playbook: ../Micro_playbooks/workspace_A4.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Configurar e instalar R
+  ansible.builtin.import_playbook: ../Micro_playbooks/R.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Configurar e Instalar Storage 1
+  ansible.builtin.import_playbook: ../Micro_playbooks/storage_cliente1.yaml
+  vars:
+    target: Laboratorio_A4
+
+
+- name: Configurar e Instalar Storage 2
+  ansible.builtin.import_playbook: ../Micro_playbooks/storage_cliente2.yaml
+  vars:
+    target: Laboratorio_A4
+
+- name: Configurar e Instalar Aviso de manutencao
+  ansible.builtin.import_playbook: ../Micro_playbooks/Manutencao_A4.yaml
+  vars:
+    target: Laboratorio_A4
+
+- name: Configurar e Instalar Imagem informativa
+  ansible.builtin.import_playbook: ../Micro_playbooks/Avisos.yaml
+  vars:
+    target: Laboratorio_A4
+
+- name: Configurar arquivos de Segurança
+  ansible.builtin.import_playbook: ../Micro_playbooks/Seguranca.yaml
+  vars:
+    target: Laboratorio_A4
+
+- name: Configurar e montar a pasta compartilhada para realização de provas
+  ansible.builtin.import_playbook: ../Micro_playbooks/pasta_prova.yaml
+  vars:
+    target: Laboratorio_A4

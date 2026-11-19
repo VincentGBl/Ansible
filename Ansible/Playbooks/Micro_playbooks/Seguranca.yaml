@@ -1,0 +1,40 @@
+---
+- name: Configuracoes de Seguranca
+  hosts: "{{target | default('null')}}"
+  become: true
+  tasks:
+    - name: Garantir que 'DenyGroups users' está no final do sshd_config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'DenyGroups users'
+        state: present
+        insertafter: EOF
+      notify: Reiniciar sshd
+
+    - name: Adicionar umask=077 na linha do mkhomedir no /etc/pam.d/common-session
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-session
+        backrefs: yes
+        regexp: '^(session\s+optional\s+pam_mkhomedir\.so)(.*)$'
+        line: '\1 umask=077'
+      failed_when: false
+
+        #Enviar script de manutencao e saude para a maquina  
+    - name: Copiar script de manutencao e saude da maquina
+      ansible.builtin.copy:
+        src: '../../Customizacoes/manutencao_e_saude.sh'
+        dest: /home/administrador/manutencao_e_saude.sh
+        mode: '0770'
+        owner: root
+        group: root
+
+
+  handlers:
+    - name: Reiniciar sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+
+
+

@@ -1,0 +1,30 @@
+---
+- name: Configurar Computadores Clientes NFS
+  hosts: "{{ target | default('null') }}"
+  become: true
+  vars:
+    # Substitua pelo IP real do seu servidor NFS ao rodar
+    servidor_nfs_ip: "192.168.1.101"
+    diretorio_origem: "/mnt/Storage1"
+    ponto_montagem: "/mnt/storage1"
+
+  tasks:
+    - name: 1. Instalar o pacote nfs-common nos computadores clientes
+      apt:
+        name: nfs-common
+        state: present
+        update_cache: yes
+
+    - name: 2. Criar a pasta onde será feito o ponto de montagem
+      file:
+        path: "{{ ponto_montagem }}"
+        state: directory
+        mode: '1777'
+
+    - name: 3. Configurar automação no /etc/fstab e realizar a montagem imediata
+      ansible.posix.mount:
+        src: "{{ servidor_nfs_ip }}:{{ diretorio_origem }}"
+        path: "{{ ponto_montagem }}"
+        fstype: nfs
+        opts: defaults
+        state: mounted  # "mounted" garante que adiciona no fstab E monta agora mesmo

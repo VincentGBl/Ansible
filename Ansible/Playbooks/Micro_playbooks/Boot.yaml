@@ -1,0 +1,34 @@
+---
+- name: Configuração para implementar o boot padrão para o windows e imagem de fundo no GRUB
+  hosts: "{{target | default('null')}}"
+  become: true
+
+  handlers:
+    - name: Atualizar configuracao do GRUB
+      ansible.builtin.command: update-grub
+
+  tasks:
+    - name: 1. Copiar imagem de fundo para o diretorio do GRUB
+      ansible.builtin.copy:
+        src: ../../Customizacoes/Boot.png # Caminho da imagem na sua máquina local (controller)
+        dest: /boot/grub/wallpaper.png # Caminho de destino na máquina alvo
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: 2. Definir a imagem de fundo no arquivo /etc/default/grub
+      ansible.builtin.lineinfile:
+        path: /etc/default/grub
+        regexp: '^#?GRUB_BACKGROUND='
+        line: 'GRUB_BACKGROUND="/boot/grub/wallpaper.jpg"'
+        state: present
+    
+
+    - name: 3. Definir a opcao padrao de boot para o Windows 11
+      ansible.builtin.lineinfile:
+        path: /etc/default/grub
+        regexp: '^#?GRUB_DEFAULT='
+        line: 'GRUB_DEFAULT=2'
+        state: present
+      notify: Atualizar configuracao do GRUB
+

@@ -1,0 +1,77 @@
+- name: Configurar Ambiente de Autenticação LDAP/SSSD
+  hosts: "{{ target | default('null') }}"
+  become: true
+  vars:
+    sssd_config_dest: "/etc/sssd/sssd.conf"
+
+  tasks:
+    - name: Garantir que os pacotes do LDAP/SSSD estão instalados
+      ansible.builtin.apt:
+        name:
+          - sssd
+          - libpam-sss
+          - libnss-sss
+          - sssd-tools
+        state: present
+          #update_cache: yes
+
+    - name: Garantir que o diretório /etc/sssd existe com as permissões corretas
+      ansible.builtin.file:
+        path: /etc/sssd
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: levar o arquivo sssd.conf da maquina Ansible para a maquina final
+      ansible.builtin.copy:
+        src: ../../Arquivos_ldap/sssd.conf
+        dest: /etc/sssd/sssd.conf
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Reiniciar servico SSSD
+ 
+    - name: levar a chave ldap para a maquina final
+      ansible.builtin.copy:
+        src: ../../Arquivos_ldap/ldap.key
+        dest: /var/ldap.key
+        owner: root
+        group: sssd
+        mode: "0640"
+      notify: Reiniciar servico SSSD
+
+    - name: levar o certificado ldap para a maquina final
+      ansible.builtin.copy:
+        src: ../../Arquivos_ldap/ldap.crt
+        dest: /var/ldap.crt
+        owner: root
+        group: sssd
+        mode: "0640"
+      notify: Reiniciar servico SSSD
+
+    # TAREFAS PÓS-CRIAÇÃO DO ARQUIVO
+    - name: Garantir que o mkhomedir está habilitado no PAM
+      ansible.builtin.command:
+        cmd: pam-auth-update --enable mkhomedir
+      register: pam_result
+      changed_when: "'mkhomedir' in pam_result.stdout"
+
+    - name: Remover o usuario adminl do grupo users
+      ansible.builtin.command:
+        cmd: gpasswd -d adminl users
+      environment:
+        LC_ALL: C
+      register: remove_group_result
+      failed_when:
+        - remove_group_result.rc != 0
+        - "'is not a member' not in remove_group_result.stderr"
+      changed_when: remove_group_result.rc == 0
+
+  handlers:
+    - name: Reiniciar servico SSSD
+      ansible.builtin.systemd:
+        name: sssd
+        state: restarted
+        enabled: yes
+

@@ -1,0 +1,9 @@
+---
+- name: Orquestrador Teste
+  hosts: localhost
+  gather_facts: false
+
+- name: Executar ollama com nova configuração
+  ansible.builtin.import_playbook: ../Micro_playbooks/workspace_A1.yaml
+  vars:
+    target: Teste

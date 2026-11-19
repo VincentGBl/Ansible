@@ -1,0 +1,52 @@
+---
+- name: Configurar Servidor NFS (Lado Servidor)
+  hosts: "{{ target | default('null') }}"
+  become: true
+  vars:
+    # DEFINA O NÚMERO DO LABORATÓRIO AQUI (Ex: "1", "2", "A", etc.)
+    numero_lab: "X"
+    
+    # Caminho base que será completado com o número do laboratório
+    caminho_compartilhado: "/mnt/Storage{{ numero_lab }}"
+    
+    # Rede permitida 
+    rede_permitida: "192.168.1.0/24"
+
+  tasks:
+    - name: 1. Instalar o pacote do servidor NFS (nfs-kernel-server)
+      apt:
+        name: nfs-kernel-server
+        state: present
+        update_cache: yes
+
+    - name: 2. Criar a pasta que será utilizada como espaço compartilhado
+      file:
+        path: "{{ caminho_compartilhado }}"
+        state: directory
+        mode: '1777'
+
+    - name: 3. Alterar as permissões de pertencimento da pasta (nobody:nogroup)
+      file:
+        path: "{{ caminho_compartilhado }}"
+        owner: adminl
+        group: nogroup
+        state: directory
+
+    - name: 4. Configurar as regras de acesso no arquivo /etc/exports
+      lineinfile:
+        path: /etc/exports
+        # Garante que a regra seja adicionada e não se duplique se rodar novamente
+        line: "{{ caminho_compartilhado }} {{ rede_permitida }}(rw,sync,no_subtree_check)"
+        state: present
+      register: exports_config
+
+    - name: 5. Aplicar novas configurações de exportação (exportfs -a)
+      command: exportfs -a
+      when: exports_config.changed
+      changed_when: true
+
+    - name: 6. Reiniciar o serviço nfs-kernel-server para aplicar as mudanças
+      systemd:
+        name: nfs-kernel-server
+        state: restarted
+        enabled: yes

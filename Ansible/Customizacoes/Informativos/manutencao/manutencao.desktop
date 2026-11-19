@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Aviso Manutencao 
+Comment=Exibe Aviso de manutenção
+Exec=/usr/local/bin/manutencao.sh
+OnlyShowIn=GNOME;XFCE;KDE;
+X-GNOME-Autostart-enabled=true
+

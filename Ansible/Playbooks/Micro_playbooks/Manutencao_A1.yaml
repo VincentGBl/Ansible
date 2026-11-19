@@ -1,0 +1,23 @@
+---
+- name: Configurar aviso de manutencao com zenity
+  hosts: "{{ target | default('null') }}"
+  become: true
+  tasks:
+
+    - name: Criar script para avisar sobre a manutencao
+      ansible.builtin.copy:
+        src: ../../Customizacoes/Informativos/manutencao/manutencaoA1.sh
+        dest: /usr/local/bin/manutencao.sh
+        owner: root
+        group: root
+        mode: "775"
+
+
+    - name: Cria Arquivo para iniciar o aviso ao logar
+      ansible.builtin.copy:
+        src: ../../Customizacoes/Informativos/manutencao/manutencao.desktop
+        dest: /etc/xdg/autostart/manutencao.desktop
+        owner: root
+        group: root
+        mode: "775"
+

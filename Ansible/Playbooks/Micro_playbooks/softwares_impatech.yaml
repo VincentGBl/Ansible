@@ -1,0 +1,317 @@
+---
+- name: Configurar Estação de Trabalho Ubuntu 26.04
+  hosts: "{{ target | default('null') }}"
+  become: true
+
+  vars:
+    install_dir: "/opt/anaconda3"
+
+    apt_packages:
+      - code
+      - wget
+      - build-essential
+      - arduino
+      - blender
+      - ca-certificates
+      - cockpit
+      - cpu-x
+      - curl
+      - dos2unix
+      - expect
+      - fonts-indic
+      - gimp
+      - git
+      - gnome-terminal
+      - gnome-user-docs-pt
+      - google-chrome-stable
+      - grep
+      - htop
+      - hwinfo
+      - hyphen-en-us
+      - hyphen-pt-br
+      - inkscape
+      - kicad
+      - language-pack-en
+      - language-pack-en-base
+      - language-pack-gnome-en
+      - language-pack-gnome-en-base
+      - language-pack-gnome-pt
+      - language-pack-gnome-pt-base
+      - language-pack-pt
+      - language-pack-pt-base
+      - libflashrom1
+      - libftdi1-2
+      - libfuse2
+      - libnss-sss
+      - libpam-sss
+      - libreoffice-help-common
+      - libreoffice-help-en-us
+      - libreoffice-help-pt
+      - libreoffice-help-pt-br
+      - libreoffice-l10n-pt
+      - libreoffice-l10n-pt-br
+      - libreoffice
+      - maxima
+      - meshlab
+      - mythes-en-us
+      - nfs-common
+      - nvtop
+      - octave
+      - octave-control
+      - octave-image
+      - octave-signal
+      - octave-statistics
+      - openssh-server
+      - openvpn
+      - python3-dev
+      - python3-opencv
+      - python3-pip
+      - python3-tk
+      - python3-venv
+      - r-base
+      - remmina
+      - scilab
+      - slack-desktop
+      - software-properties-common
+      - sssd
+      - sssd-tools
+      - systemd-timesyncd
+      - texmaker
+      - thunderbird-locale-en
+      - thunderbird-locale-en-us
+      - thunderbird-locale-pt
+      - thunderbird-locale-pt-br
+      - tmux
+      - vim
+      - wxmaxima
+      - jmol
+      - xcas    
+      - fluid   
+      - prerex      
+      - vprerex     
+      - elan
+      - jupyter-lab
+      - jupyter-core
+      - jupyter-notebook
+      - feh
+      - zenity
+      - lm-sensors
+      - smartmontools
+
+  tasks:
+
+    - name: Garantir que dependências básicas de repositório estão instaladas
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gpg
+          - software-properties-common
+        state: present
+
+    # --- CONFIGURAÇÃO DE REPOSITÓRIOS DE TERCEIROS ---
+
+    - name: Garantir diretório de chaves do APT
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+        # Chave GPG do Visual Studio Code
+    - name: Baixar chave GPG oficial do VS Code
+      ansible.builtin.get_url:
+        url: https://packages.microsoft.com/keys/microsoft.asc
+        dest: /etc/apt/keyrings/vscode.asc
+        mode: '0644'
+
+    # Correção do Aviso: Chave GPG do Google Chrome via keyring dedicado
+    - name: Baixar chave GPG do Google Chrome
+      ansible.builtin.get_url:
+        url: https://dl.google.com/linux/linux_signing_key.pub
+        dest: /etc/apt/keyrings/google-chrome.asc
+        mode: '0644'
+
+    # Chave GPG do Slack via keyring dedicado
+    - name: Baixar chave GPG do Slack
+      ansible.builtin.get_url:
+        url: https://packagecloud.io/slacktechnologies/slack/gpgkey
+        dest: /etc/apt/keyrings/slack.asc
+        mode: '0644'
+
+   # Repositório do Visual Studio Code
+    - name: Adicionar repositório do VS Code
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/vscode.asc] https://packages.microsoft.com/repos/code stable main"
+        state: present
+        filename: vscode
+
+    # Repositório do Google Chrome
+    - name: Adicionar repositório do Google Chrome
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.asc] http://dl.google.com/linux/chrome/deb/ stable main"
+        state: present
+        filename: google-chrome
+
+    # Repositório do Slack
+    - name: Adicionar repositório do Slack
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/slack.asc] https://packagecloud.io/slacktechnologies/slack/debian/ jessie main"
+        state: present
+        filename: slack
+
+    # --- INSTALAÇÃO DOS PACOTES APT ---
+
+    - name: Atualizar o cache do APT e instalar a lista de pacotes
+      ansible.builtin.apt:
+        name: "{{ apt_packages }}"
+        state: present
+        update_cache: yes
+
+    # --- CORREÇÃO DE RENDERIZAÇÃO: MESHLAB EM WAYLAND (NVIDIA) ---
+
+    - name: Verificar se o .desktop do MeshLab já foi desviado (dpkg-divert)
+      ansible.builtin.command: dpkg-divert --list /usr/share/applications/meshlab.desktop
+      register: meshlab_divert_check
+      changed_when: false
+
+    - name: Desviar o .desktop original do MeshLab via dpkg-divert (protege contra updates do apt)
+      ansible.builtin.command: >
+        dpkg-divert --local --rename
+        --divert /usr/share/applications/meshlab.desktop.dpkg-orig
+        --add /usr/share/applications/meshlab.desktop
+      when: meshlab_divert_check.stdout == ""
+
+    - name: Ler o conteúdo original do .desktop do MeshLab (arquivo desviado)
+      ansible.builtin.slurp:
+        src: /usr/share/applications/meshlab.desktop.dpkg-orig
+      register: meshlab_desktop_original
+
+    - name: Escrever o .desktop customizado do MeshLab (Exec corrigido) no caminho local, imune a updates do apt
+      ansible.builtin.copy:
+        dest: /usr/share/applications/meshlab.desktop
+        owner: root
+        group: root
+        mode: '0644'
+        content: "{{ (meshlab_desktop_original.content | b64decode) | regex_replace('^Exec=meshlab.*$', 'Exec=env QT_QPA_PLATFORM=xcb meshlab %f', multiline=True) }}"
+      notify: Atualizar banco de dados de aplicativos
+
+
+    - name: Verificar se o .desktop do Jupyter Notebook já foi desviado (dpkg-divert)
+      ansible.builtin.command: dpkg-divert --list /usr/share/applications/jupyter-notebook.desktop
+      register: jupyter_divert_check
+      changed_when: false
+
+    - name: Desviar o .desktop original do Jupyter Notebook via dpkg-divert (protege contra updates do apt)
+      ansible.builtin.command: >
+        dpkg-divert --local --rename
+        --divert /usr/share/applications/jupyter-notebook.desktop.dpkg-orig
+        --add /usr/share/applications/jupyter-notebook.desktop
+      when: jupyter_divert_check.stdout == ""
+
+    - name: Escrever o .desktop customizado do Jupyter Notebook (ativa ambiente base do conda), imune a updates do apt
+      ansible.builtin.copy:
+        dest: /usr/share/applications/jupyter-notebook.desktop
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Desktop Entry]
+          Name=Jupyter Notebook
+          Comment=Run Jupyter Notebook
+          Exec=bash -ic "source {{ install_dir }}/etc/profile.d/conda.sh && conda activate base && cd ~/notebooks 2>/dev/null || cd ~; jupyter-notebook %f"
+          Terminal=true
+          Type=Application
+          Icon=notebook
+          StartupNotify=true
+          MimeType=application/x-ipynb+json;
+          Categories=Development;Education;
+          Keywords=python;
+      notify: Atualizar banco de dados de aplicativos
+
+    - name: Verificar se o .desktop do Jupyter Lab já foi desviado (dpkg-divert)
+      ansible.builtin.command: dpkg-divert --list /usr/share/applications/jupyter-lab.desktop
+      register: jupyterlab_divert_check
+      changed_when: false
+
+    - name: Desviar o .desktop original do Jupyter Lab via dpkg-divert (protege contra updates do apt)
+      ansible.builtin.command: >
+        dpkg-divert --local --rename
+        --divert /usr/share/applications/jupyter-lab.desktop.dpkg-orig
+        --add /usr/share/applications/jupyter-lab.desktop
+      when: jupyterlab_divert_check.stdout == ""
+
+    - name: Escrever o .desktop customizado do Jupyter Lab (ativa ambiente base do conda), imune a updates do apt
+      ansible.builtin.copy:
+        dest: /usr/share/applications/jupyter-lab.desktop
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Desktop Entry]
+          Name=Jupyter Lab
+          Comment=Run Jupyter Lab
+          Exec=bash -ic "source {{ install_dir }}/etc/profile.d/conda.sh && conda activate base && cd ~/notebooks 2>/dev/null || cd ~; jupyter-lab %f"
+          Terminal=true
+          Type=Application
+          Icon=notebook
+          StartupNotify=true
+          MimeType=application/x-ipynb+json;
+          Categories=Development;Education;
+          Keywords=python;
+      notify: Atualizar banco de dados de aplicativos
+
+
+    # --- INSTALAÇÃO DOS PACOTES SNAP ---
+    
+    - name: Instalar Docker via Snap
+      community.general.snap:
+        name: docker
+        state: present  
+
+    - name: Instalar Firefox via Snap
+      community.general.snap:
+        name: firefox
+        state: present
+
+    - name: Instalar Brave Browser via Snap
+      community.general.snap:
+        name: brave
+        state: present
+
+
+    - name: Instalar Julia via Snap
+      community.general.snap:
+        name: julia
+        state: present
+        classic: true
+
+    - name: Instalar TeX Live
+      ansible.builtin.apt:
+        name:
+          - texlive-latex-extra
+          - texlive-fonts-recommended
+          - texlive-lang-portuguese
+        state: present
+    
+    - name: Instalação de KIT cuda e driver de vídeo
+      ansible.builtin.apt:
+        name:
+          - nvidia-driver-595
+          - nvidia-cuda-toolkit
+        state: present
+
+        # Essa configuracao esta sendo realizada para tirar o crash de aplicacoes em tela cheia por conta da sincronizacao de frames entre a placa de video e a onboard
+    - name: Garantir que __NV_DISABLE_EXPLICIT_SYNC=1 está definido em /etc/environment
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^__NV_DISABLE_EXPLICIT_SYNC='
+        line: '__NV_DISABLE_EXPLICIT_SYNC=1'
+        state: present
+   
+    - name: Reiniciar máquina para carregar módulos do Kernel/NVIDIA
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+
+  handlers:
+    - name: Atualizar banco de dados de aplicativos
+      ansible.builtin.command: update-desktop-database /usr/share/applications
+      changed_when: true

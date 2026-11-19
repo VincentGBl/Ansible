@@ -1,0 +1,66 @@
+---
+- name: Configurar aviso de login com feh
+  hosts: "{{ target | default('null') }}"
+  become: true
+  tasks:
+
+    # 1. Instalar a dependência (feh)
+    - name: Garantir que o feh está instalado
+      ansible.builtin.package:
+        name: feh
+        state: present
+
+    # 2. Criar o diretório de destino caso ele não exista
+    - name: Criar diretório /media/Informativos/
+      ansible.builtin.file:
+        path: /media/Informativos
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    # 3. Enviar a imagem com o módulo copy do Ansible
+    - name: Copiar imagem do aviso para a máquina cliente
+      ansible.builtin.copy:
+        src: '../../Customizacoes/Informativos/Info.jpg'
+        dest: /media/Informativos/Info.jpg
+        mode: '0655'
+        owner: root
+        group: root
+
+    # 4. Criar o script Shell que chama o feh com variáveis de ambiente ajustadas
+    - name: Criar script executor do feh em /usr/local/bin/
+      ansible.builtin.copy:
+        dest: /usr/local/bin/mostrar-aviso.sh
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          #!/bin/bash
+          # 1. Aguarda a interface gráfica (GNOME/Wayland) carregar totalmente
+          sleep 5
+
+          # 2. Exporta a variável DISPLAY caso não tenha sido herdada
+           export DISPLAY=${DISPLAY:-:0}
+
+          # 3. Executa o feh e salva eventuais erros em um arquivo de log
+          feh --geometry 800x600+50%+50% \
+              --auto-zoom \
+              --title "Aviso Importante" \
+              /media/Informativos/Info.jpg >> /tmp/feh-aviso.log 2>&1 &
+
+    # 5. Criar a entrada global no XDG Autostart
+    - name: Configurar inicialização automática no XDG Autostart
+      ansible.builtin.copy:
+        dest: /etc/xdg/autostart/aviso-login.desktop
+        mode: '0655'
+        owner: root
+        group: root
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Aviso Informativo Login
+          Comment=Exibe banner informativo no login via feh
+          Exec=/usr/local/bin/mostrar-aviso.sh
+          OnlyShowIn=GNOME;XFCE;KDE;
+          X-GNOME-Autostart-enabled=true

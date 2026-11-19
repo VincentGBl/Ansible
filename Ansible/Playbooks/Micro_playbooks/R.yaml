@@ -1,0 +1,79 @@
+---
+- name: Instalar Linguagem R e Bibliotecas para os Alunos
+  hosts: "{{ target | default('null') }}"
+  become: true
+
+  tasks:
+    - name: 1. Garantir que as dependências de sistema para pacotes do R estão instaladas
+      ansible.builtin.apt:
+        name:
+          - r-base
+          - r-base-dev
+          - libcurl4-openssl-dev
+          - libssl-dev
+          - libxml2-dev
+          - libfontconfig1-dev
+          - libharfbuzz-dev
+          - libfribidi-dev
+          - libfreetype6-dev
+          - libpng-dev
+          - libtiff5-dev
+          - libjpeg-dev
+        state: present
+        update_cache: yes
+
+    - name: 2. Instalar bibliotecas do R globalmente via CRAN
+      ansible.builtin.shell: |
+        Rscript -e "
+        pacotes <- c(
+          'tidyverse', 'askpass', 'assertthat', 'backports', 'base64enc', 
+          'bit', 'bit64', 'blob', 'bslib', 'cachem', 'callr', 'cellranger', 
+          'cli', 'clipr', 'colorspace', 'conflicted', 'cpp11', 'crayon', 
+          'curl', 'data.table', 'DBI', 'dbplyr', 'digest', 'dtplyr', 
+          'ellipsis', 'evaluate', 'fansi', 'farver', 'fastmap', 'fontawesome', 
+          'fs', 'gargle', 'generics', 'glue', 'googledrive', 'googlesheets4', 
+          'gtable', 'haven', 'highr', 'hms', 'htmltools', 'httr', 'ids', 
+          'isoband', 'jquerylib', 'jsonlite', 'knitr', 'labeling', 'lifecycle', 
+          'magrittr', 'memoise', 'mime', 'modelr', 'munsell', 'openssl', 
+          'pillar', 'pkgconfig', 'prettyunits', 'processx', 'progress', 'ps', 
+          'R6', 'ragg', 'rappdirs', 'RColorBrewer', 'readr', 'readxl', 
+          'rematch', 'rematch2', 'reprex', 'rlang', 'rmarkdown', 'rstudioapi', 
+          'rvest', 'S7', 'sass', 'scales', 'selectr', 'stringi', 'stringr', 
+          'sys', 'systemfonts', 'textshaping', 'tibble', 'timechange', 
+          'tinytex', 'tzdb', 'utf8', 'uuid', 'vctrs', 'viridisLite', 
+          'vroom', 'withr', 'xfun', 'xml2', 'yaml'
+        )
+        
+        # Filtra apenas o que ainda não estiver instalado no sistema
+        novos_pacotes <- pacotes[!(pacotes %in% installed.packages()[,'Package'])]
+        
+        if(length(novos_pacotes) > 0) {
+          install.packages(novos_pacotes, repos='https://cloud.r-project.org', lib='/usr/local/lib/R/site-library')
+        }
+        "
+      register: r_install_output
+      changed_when: "'Installing package' in r_install_output.stdout"
+
+        #    - name: 3. Verificar se as principais bibliotecas carregam normalmente
+        #      ansible.builtin.command: Rscript -e "library(tidyverse); library(data.table); library(rmarkdown)"
+        #      changed_when: false
+
+    - name: 3. Instalar o gdebi-core para gerenciar dependências do pacote .deb
+      ansible.builtin.apt:
+        name: gdebi-core
+        state: present
+
+    - name: 4. Baixar o instalador do RStudio Desktop (Ubuntu 22)
+      ansible.builtin.get_url:
+        url: "https://download1.rstudio.org/electron/jammy/amd64/rstudio-2026.07.0-139-amd64.deb"
+        dest: "/tmp/rstudio-desktop.deb"
+        mode: '0644'
+
+    - name: 5. Instalar o RStudio via gdebi
+      ansible.builtin.apt:
+        deb: "/tmp/rstudio-desktop.deb"
+
+    - name: 6. Remover o arquivo temporário do instalador
+      ansible.builtin.file:
+        path: "/tmp/rstudio-desktop.deb"
+        state: absent

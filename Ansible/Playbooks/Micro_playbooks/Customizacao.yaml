@@ -1,0 +1,191 @@
+---
+
+- name: Customizações IMPATECH
+  hosts: "{{target | default('null')}}"
+  become: true
+
+  tasks:
+
+    - name: Remover o arquivo de regra de login do dconf
+      ansible.builtin.file:
+        path: /etc/dconf/db/gdm.d/00-login-screen
+        state: absent
+
+    - name: Remover o perfil do GDM do dconf
+      ansible.builtin.file:
+        path: /etc/dconf/profile/gdm
+        state: absent
+
+    - name: Remover o diretório de regras do GDM no dconf (se estiver vazio)
+      ansible.builtin.file:
+        path: /etc/dconf/db/gdm.d
+        state: absent
+
+    - name: Atualizar a base de dados do dconf
+      ansible.builtin.command:
+        cmd: dconf update
+      changed_when: true
+
+
+    - name: Desabilitar a lista de usuários (arquivo padrão)
+      ansible.builtin.replace:
+        path: /etc/gdm3/greeter.dconf-defaults
+        regexp: '# disable-user-list=true'
+        replace: ' disable-user-list=true'
+
+    - name: Definir mensagem padrão na tela de login
+      ansible.builtin.lineinfile:
+        path: /etc/gdm3/greeter.dconf-defaults
+        regexp: '^#?\s*banner-message-text='
+        line: 'banner-message-text="                           IMPA Tech\nMatemática | IA & Ciência de Dados\nCiência da Computação | Física"'
+        insertafter: '^\[org/gnome/login-screen\]'
+
+    - name: Habilitar mensagem padrão na tela de login
+      ansible.builtin.lineinfile:
+        path: /etc/gdm3/greeter.dconf-defaults
+        regexp: '^#?\s*banner-message-enable='
+        line: 'banner-message-enable=true'
+        insertafter: '^\[org/gnome/login-screen\]'
+   # - name: Adicionar Mensagem padrão na tela de Login (arquivo padrão)
+   #  ansible.builtin.replace:
+   #    path: /etc/gdm3/greeter.dconf-defaults
+   #    regexp: '# banner-message-text=' 
+   #    replace: 'banner-message-text="!!!Deixe sua mensagem de boas-vindas aqui!!!"'
+
+   # - name: Adicionar Mensagem padrão na tela de Login (arquivo padrão)
+   #   ansible.builtin.replace:
+   #    path: /etc/gdm3/greeter.dconf-defaults
+   #    regexp: "'Welcome'"
+   #    replace: ''
+
+    - name: Habilitar mensagem padrão na tela de login (arquivo padrão)
+      ansible.builtin.replace:
+        path: /etc/gdm3/greeter.dconf-defaults
+        regexp: '# banner-message-enable=true'
+        replace: 'banner-message-enable=true'
+
+
+    - name: Criar cópia da imagem de fundo padrão
+      ansible.builtin.copy:
+        src: /usr/share/backgrounds/warty-final-ubuntu.png
+        dest: /usr/share/backgrounds/.bkp_warty-final-ubuntu.png
+        remote_src: true
+        owner: adminl
+        group: adminl
+        mode: "664"
+
+
+    - name: Substitui a imagem de fundo padrão
+      ansible.builtin.copy:
+        src: ../../Customizacoes/Wallpaper.png
+        dest: /usr/share/backgrounds/warty-final-ubuntu.png
+        owner: adminl
+        group: adminl
+        mode: "664"
+
+
+    - name: Criar atalho do Institucional na barra de apps
+      ansible.builtin.copy:
+        dest: /usr/share/applications/Institucional.desktop
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Name=Institucional IMPA Tech
+          Comment=Acessar o site institucional do IMPA Tech
+          Exec=google-chrome --app=https://institucional.impa.br
+          Icon=emblem-system
+          Terminal=false
+          Type=Application
+          Categories=Education;Network;
+
+    - name: Criar atalho da Biblioteca na barra de apps
+      ansible.builtin.copy:
+        dest: /usr/share/applications/Biblioteca.desktop
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Name=Biblioteca IMPA
+          Comment=Acessar a Biblioteca do IMPA
+          Exec=google-chrome --app=https://biblioteca.impa.br
+          Icon=accessories-dictionary
+          Terminal=false
+          Type=Application
+          Categories=Education;Network;
+
+ 
+    - name: Garantir que a pasta Desktop existe no /etc/skel
+      ansible.builtin.file:
+        path: /etc/skel/Desktop
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Criar atalho do Institucional no Desktop
+      ansible.builtin.copy:
+        dest: /etc/skel/Desktop/Institucional.desktop
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Name=Institucional IMPA Tech
+          Comment=Acessar o site institucional do IMPA Tech
+          Exec=google-chrome --app=https://institucional.impa.br
+          Icon=emblem-system
+          Terminal=false
+          Type=Application
+          Categories=Education;Network;
+
+    - name: Criar atalho da Biblioteca no Desktop
+      ansible.builtin.copy:
+        dest: /etc/skel/Desktop/Biblioteca.desktop
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Name=Biblioteca IMPA
+          Comment=Acessar a Biblioteca do IMPA
+          Exec=google-chrome --app=https://biblioteca.impa.br
+          Icon=accessories-dictionary
+          Terminal=false
+          Type=Application
+          Categories=Education;Network;
+
+    - name: Criar atalho do Suporte no Desktop
+      ansible.builtin.copy:
+        dest: /etc/skel/Desktop/Suporte.desktop
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Name=Suporte IMPA Tech
+          Comment=Abrir chamados e solicitações de suporte do IMPA Tech
+          Exec=google-chrome --app=https://suporte.impatech.edu.br
+          Icon=applications-internet-symbolic
+          Terminal=false
+          Type=Application
+          Categories=Network;Office;
+
+    - name: Adicionar permissão dos atalhos do Desktop no /etc/skel/.profile
+      ansible.builtin.blockinfile:
+        path: /etc/skel/.profile
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - MARCAR ATALHOS CONFIAVEIS"
+        block: |
+          # Garante permissao de inicializacao nos atalhos do Desktop
+          gio set ~/Desktop/Institucional.desktop metadata::trusted true 2>/dev/null || true
+          gio set ~/Desktop/Biblioteca.desktop metadata::trusted true 2>/dev/null || true
+          gio set ~/Desktop/Suporte.desktop metadata::trusted true 2>/dev/null || true
+
+

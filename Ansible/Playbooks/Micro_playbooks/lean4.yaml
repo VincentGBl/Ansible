@@ -1,0 +1,72 @@
+---
+- name: Configuração Persistente do Lean 4 e Mathematics in Lean
+  hosts: "{{ target | default('null') }}"
+  become: true
+  vars:
+    lean_base_dir: "/opt/lean4"
+    mil_dir: "{{ lean_base_dir }}/mathematics_in_lean"
+    env_file: "/etc/profile.d/lean_config.sh"
+
+  tasks:
+    - name: 1. Garantir dependências essenciais do sistema instaladas
+      ansible.builtin.apt:
+        name:
+          - curl
+          - git
+          - build-essential
+        state: present
+        update_cache: yes
+
+    - name: 2. Criar estrutura de diretórios global fora do /home
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0777'
+      loop:
+        - "{{ lean_base_dir }}"
+        - "{{ lean_base_dir }}/.elan"
+        - "{{ lean_base_dir }}/.cache"
+
+    - name: 3. Configurar variáveis de ambiente globais em /etc/profile.d/
+      ansible.builtin.copy:
+        dest: "{{ env_file }}"
+        content: |
+          # Configurações globais para persistência do Lean 4 - Mantido fora do /home
+          export ELAN_HOME="{{ lean_base_dir }}/.elan"
+          export XDG_CACHE_HOME="{{ lean_base_dir }}/.cache"
+          export PATH="$ELAN_HOME/bin:$PATH"
+        mode: '0644'
+
+    - name: 4. Baixar e instalar o Elan (Gerenciador de Versões do Lean)
+      ansible.builtin.shell: |
+        curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path
+      environment:
+        ELAN_HOME: "{{ lean_base_dir }}/.elan"
+        XDG_CACHE_HOME: "{{ lean_base_dir }}/.cache"
+        PATH: "{{ lean_base_dir }}/.elan/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      args:
+        creates: "{{ lean_base_dir }}/.elan/bin/elan"
+
+    - name: 5. Clonar ou atualizar o repositório Mathematics in Lean
+      ansible.builtin.git:
+        repo: 'https://github.com/leanprover-community/mathematics_in_lean.git'
+        dest: "{{ mil_dir }}"
+        clone: yes
+        update: yes
+
+    - name: 6. Baixar artefatos pré-compilados da Mathlib (lake exe cache get)
+      ansible.builtin.shell: |
+        lake exe cache get
+      args:
+        chdir: "{{ mil_dir }}"
+      environment:
+        ELAN_HOME: "{{ lean_base_dir }}/.elan"
+        XDG_CACHE_HOME: "{{ lean_base_dir }}/.cache"
+        PATH: "{{ lean_base_dir }}/.elan/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+    - name: 7. Forçar permissões recursivas completas para os estudantes (777)
+      ansible.builtin.file:
+        path: "{{ lean_base_dir }}"
+        state: directory
+        mode: '0777'
+        recurse: yes

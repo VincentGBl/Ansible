@@ -1,0 +1,74 @@
+---
+- name: Orquestrador do Laboratório A2
+  hosts: localhost
+  gather_facts: false
+
+
+
+- name: Executar Customização de papel de parede
+  ansible.builtin.import_playbook: ../Micro_playbooks/Customizacao.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Executar Instalação do conda
+  ansible.builtin.import_playbook: ../Micro_playbooks/conda_bashrc.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Instalar aplicativos APT e Snap
+  ansible.builtin.import_playbook: ../Micro_playbooks/softwares_impatech.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Configurar Google Workspace (LDAP)
+  ansible.builtin.import_playbook: ../Micro_playbooks/workspace_A2.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Configurar e instalar R
+  ansible.builtin.import_playbook: ../Micro_playbooks/R.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Configurar e Instalar Storage 1
+  ansible.builtin.import_playbook: ../Micro_playbooks/storage_cliente1.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Configurar e Instalar Storage 2
+  ansible.builtin.import_playbook: ../Micro_playbooks/storage_cliente2.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Configurar Sistema de Avisos
+  ansible.builtin.import_playbook: ../Micro_playbooks/Avisos.yaml
+  vars:
+    target: Laboratorio_A2
+
+- name: Manutencar aviso
+  ansible.builtin.import_playbook: ../Micro_playbooks/Manutencao_A2.yaml
+  vars:
+    target: Laboratorio_A2
+
+- name: Configurações de Segurança
+  ansible.builtin.import_playbook: ../Micro_playbooks/Seguranca.yaml
+  vars:
+    target: Laboratorio_A2
+
+
+- name: Configuração Ollama
+  ansible.builtin.import_playbook: ../Micro_playbooks/ollama.yaml
+  vars:
+    target: Laboratorio_A2
+
+- name: Configurar e montar a pasta compartilhada para realização de provas
+  ansible.builtin.import_playbook: ../Micro_playbooks/pasta_prova.yaml
+  vars:
+    target: Laboratorio_A2
