@@ -1,4 +1,4 @@
-# Projeto Ansible: do levantamento à implantação
+# Projeto Ansible: uma implementação real em ambiente corporativo
 
 Este repositório documenta o processo que segui para automatizar a configuração das máquinas com Ansible, em dez etapas: do levantamento das necessidades até a implantação gradual em ambiente corporativo.
 
